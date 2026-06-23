@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>⚡ 反应时间测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* 移除 background-color 的 transition，让变色立即生效 */
+            cursor: pointer;  /* 始终显示手型光标 */
+            user-select: none;  /* 禁止选中文字 */
+        }
+
+        /* 初始状态：紫色背景 */
+        .state-waiting {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        /* 准备状态：蓝色背景 */
+        .state-ready {
+            background: linear-gradient(135deg, #4dabf7 0%, #228be6 100%);
+        }
+
+        /* 点击后状态：绿色背景 */
+        .state-clicked {
+            background: linear-gradient(135deg, #51cf66 0%, #40c057 100%);
+        }
+
+        /* 太快了状态：红色背景 */
+        .state-too-soon {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+        }
+
+        /* 主容器 */
+        .container {
+            text-align: center;
+            color: white;
+            padding: 40px;
+            max-width: 600px;
+        }
+
+        /* 标题 */
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 说明文字 */
+        .instruction {
+            font-size: 24px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        /* 时间显示 */
+        .time-display {
+            font-size: 72px;
+            font-weight: bold;
+            margin: 30px 0;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 开始按钮 */
+        .start-btn {
+            padding: 20px 50px;
+            font-size: 24px;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            background: white;
+            color: #667eea;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .start-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* 隐藏类 */
+        .hidden {
+            display: none !important;
+        }
+
+        /* 历史记录 */
+        .history {
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .history h3 {
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+
+        .history-list {
+            list-style: none;
+            font-size: 18px;
+        }
+
+        .history-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .history-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* 评价 */
+        .rating {
+            font-size: 36px;
+            margin: 20px 0;
+        }
+
+        /* 重置按钮 */
+        .reset-btn {
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border: 2px solid white;
+            border-radius: 50px;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .reset-btn:hover {
+            background: white;
+            color: #667eea;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="state-waiting">
+    <div class="container">
+        <!-- 初始状态：显示开始按钮 -->
+        <div id="start-screen">
+            <h1>⚡ 反应时间测试</h1>
+            <p class="instruction">
+                测试你的反应速度！<br>
+                看到背景变色后，<strong>立即点击页面</strong>
+            </p>
+            <button class="start-btn" id="start-btn">开始测试</button>
+            <div class="history" id="history-section">
+                <h3>📊 历史记录</h3>
+                <ul class="history-list" id="history-list">
+                    <!-- 历史记录会动态插入这里 -->
+                </ul>
+            </div>
+        </div>
+
+        <!-- 等待状态 -->
+        <div id="waiting-screen" class="hidden">
+            <h1>⏳ 等待中...</h1>
+            <p class="instruction">看到背景变色后立即点击！</p>
+        </div>
+
+        <!-- 结果显示状态 -->
+        <div id="result-screen" class="hidden">
+            <h1 id="result-title"></h1>
+            <div class="time-display" id="time-display"></div>
+            <div class="rating" id="rating"></div>
+            <button class="reset-btn" id="reset-btn">再试一次</button>
+        </div>
+    </div>
+
+    <script>
+        // ===== 全局变量 =====
+
+        let startTime = 0;  // 记录变色开始时间
+        let timeoutId = null;  // 用于存储 setTimeout 的 ID
+        let reactionTimes = [];  // 存储历史反应时间
+
+        // ===== 获取 DOM 元素 =====
+
+        const body = document.body;
+        const startScreen = document.getElementById('start-screen');
+        const waitingScreen = document.getElementById('waiting-screen');
+        const resultScreen = document.getElementById('result-screen');
+        const startBtn = document.getElementById('start-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const resultTitle = document.getElementById('result-title');
+        const timeDisplay = document.getElementById('time-display');
+        const ratingDisplay = document.getElementById('rating');
+        const historyList = document.getElementById('history-list');
+
+        // ===== 随机延迟时间（1到5秒之间）=====
+        function getRandomDelay() {
+            return Math.random() * 4000 + 1000;  // 1000ms 到 5000ms
+        }
+
+        // ===== 开始测试 =====
+        function startTest() {
+            // 切换到等待状态
+            body.className = 'state-ready';
+            startScreen.classList.add('hidden');
+            waitingScreen.classList.remove('hidden');
+
+            // 设置随机延迟后变色
+            const delay = getRandomDelay();
+            timeoutId = setTimeout(() => {
+                changeColor();
+            }, delay);
+        }
+
+        // ===== 背景变色 =====
+        function changeColor() {
+            // 记录当前时间（毫秒）
+            startTime = Date.now();
+
+            // 切换到绿色背景（表示可以点击了）
+            body.className = 'state-clicked';
+
+            // 隐藏等待界面
+            waitingScreen.classList.add('hidden');
+        }
+
+        // ===== 处理点击 =====
+        function handleClick() {
+            // 计算反应时间（当前时间 - 变色时间）
+            const endTime = Date.now();
+            const reactionTime = endTime - startTime;
+
+            // 如果还没变色就点击了（startTime 为 0）
+            if (startTime === 0) {
+                // 用户点太快了！
+                tooSoon();
+                return;
+            }
+
+            // 显示结果
+            showResult(reactionTime);
+
+            // 重置 startTime，防止重复触发
+            startTime = 0;
+        }
+
+        // ===== 点太快了 =====
+        function tooSoon() {
+            // 清除定时器
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+
+            // 切换到红色背景
+            body.className = 'state-too-soon';
+
+            // 显示提示
+            waitingScreen.classList.add('hidden');
+            resultScreen.classList.remove('hidden');
+            resultTitle.textContent = '⚠️ 太快了！';
+            timeDisplay.textContent = '—';
+            ratingDisplay.textContent = '等背景变色后再点击哦';
+        }
+
+        // ===== 显示结果 =====
+        function showResult(reactionTime) {
+            // 保存到历史记录
+            reactionTimes.push(reactionTime);
+
+            // 切换到结果界面
+            waitingScreen.classList.add('hidden');
+            resultScreen.classList.remove('hidden');
+
+            // 显示时间（保留2位小数）
+            timeDisplay.textContent = reactionTime.toFixed(0) + ' ms';
+
+            // 根据反应时间给出评价
+            let rating = '';
+            if (reactionTime < 200) {
+                rating = '⚡ 闪电侠！超神反应！';
+            } else if (reactionTime < 300) {
+                rating = '🔥 非常快！职业选手级别！';
+            } else if (reactionTime < 400) {
+                rating = '👍 很快！超过大多数人！';
+            } else if (reactionTime < 500) {
+                rating = '😊 不错！正常水平！';
+            } else if (reactionTime < 700) {
+                rating = '😐 一般，还可以更快！';
+            } else {
+                rating = '🐌 有点慢，多练练！';
+            }
+
+            ratingDisplay.textContent = rating;
+
+            // 更新历史记录
+            updateHistory();
+        }
+
+        // ===== 更新历史记录 =====
+        function updateHistory() {
+            // 清空历史列表
+            historyList.innerHTML = '';
+
+            // 显示最近5次成绩（倒序）
+            const recentTimes = reactionTimes.slice(-5).reverse();
+
+            recentTimes.forEach((time, index) => {
+                const li = document.createElement('li');
+                li.textContent = `${reactionTimes.length - index}. ${time.toFixed(0)} ms`;
+                historyList.appendChild(li);
+            });
+        }
+
+        // ===== 重置测试 =====
+        function resetTest() {
+            // 清除定时器
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+
+            // 重置变量
+            startTime = 0;
+
+            // 切换回初始状态
+            body.className = 'state-waiting';
+            resultScreen.classList.add('hidden');
+            startScreen.classList.remove('hidden');
+        }
+
+        // ===== 事件监听 =====
+
+        // 点击开始按钮
+        startBtn.addEventListener('click', startTest);
+
+        // 点击重置按钮
+        resetBtn.addEventListener('click', resetTest);
+
+        // 点击整个页面（排除按钮）
+        body.addEventListener('click', (event) => {
+            // 如果点击的是按钮，不处理
+            if (event.target.tagName === 'BUTTON') {
+                return;
+            }
+            handleClick();
+        });
+    </script>
+</body>
+</html>
